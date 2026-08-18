@@ -16,6 +16,14 @@ async function bootstrap() {
       },
     }),
   );
+  const corsOptions = {
+    origin: 'http://localhost:4200',
+    methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization'],
+    credentials: true,
+  };
+
+  app.enableCors(corsOptions);
   const port = Number(process.env.API_PORT ?? 3000);
   await app.listen(port);
   Logger.log(`Application is running on: http://localhost:${port}`);
