@@ -1,0 +1,17 @@
+services:
+  db:
+    image: mariadb:11
+    container_name: izac-db
+    restart: always
+    environment:
+      MARIADB_ROOT_PASSWORD: H4ch1r0Ok4@51c0r5ch1
+      MARIADB_DATABASE: izac_db
+      MARIADB_USER: izac_api
+      MARIADB_PASSWORD: T1m3N0tImp0rt4nt
+    ports:
+      - "3307:3306"
+    volumes:
+      - izac_db_data:/var/lib/mysql
+
+volumes:
+  izac_db_data:
