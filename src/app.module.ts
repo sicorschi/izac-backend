@@ -5,6 +5,7 @@ import { AppController } from './app.controller';
 import { JwtModule } from '@nestjs/jwt';
 import { AuthModule } from './auth/auth.module';
 import { DevicesModule } from './devices/devices.module';
+import { SensorsModule } from './sensors/sensors.module';
 
 @Module({
   imports: [
@@ -36,6 +37,7 @@ import { DevicesModule } from './devices/devices.module';
     }),
     AuthModule,
     DevicesModule,
+    SensorsModule,
   ],
   controllers: [AppController],
   providers: [],

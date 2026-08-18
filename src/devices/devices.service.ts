@@ -31,7 +31,6 @@ export class DevicesService {
   }
 
   async remove(id: number) {
-    await this.deviceRepository.delete(id);
-    return { deleted: true };
+    return this.deviceRepository.delete(id);
   }
 }
