@@ -6,6 +6,7 @@ import { JwtModule } from '@nestjs/jwt';
 import { AuthModule } from './auth/auth.module';
 import { DevicesModule } from './devices/devices.module';
 import { SensorsModule } from './sensors/sensors.module';
+import { DashboardModule } from './dashboard/dashboard.module';
 
 @Module({
   imports: [
@@ -38,6 +39,7 @@ import { SensorsModule } from './sensors/sensors.module';
     AuthModule,
     DevicesModule,
     SensorsModule,
+    DashboardModule,
   ],
   controllers: [AppController],
   providers: [],
