@@ -1,4 +1,12 @@
-import { IsNotEmpty, IsString, IsIP } from 'class-validator';
+import {
+  IsIP,
+  IsNotEmpty,
+  IsNumber,
+  IsOptional,
+  IsString,
+  Max,
+  Min,
+} from 'class-validator';
 
 export class CreateDeviceDto {
   @IsNotEmpty()
@@ -12,4 +20,10 @@ export class CreateDeviceDto {
   @IsNotEmpty()
   @IsIP()
   ip!: string;
+
+  @IsOptional()
+  @IsNumber()
+  @Min(1)
+  @Max(65535)
+  port?: number;
 }

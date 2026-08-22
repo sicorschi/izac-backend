@@ -21,6 +21,9 @@ export class Device extends TimestampedEntity {
   @Column()
   ip!: string;
 
+  @Column({ nullable: true, default: 80 })
+  port!: number;
+
   @Column({ nullable: true, default: 'unknown' })
   uptime!: string;
 
