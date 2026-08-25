@@ -7,6 +7,7 @@ import { AuthModule } from './auth/auth.module';
 import { DevicesModule } from './devices/devices.module';
 import { SensorsModule } from './sensors/sensors.module';
 import { DashboardModule } from './dashboard/dashboard.module';
+import { MqttModule } from './mqtt/mqtt.module';
 
 @Module({
   imports: [
@@ -40,6 +41,7 @@ import { DashboardModule } from './dashboard/dashboard.module';
     DevicesModule,
     SensorsModule,
     DashboardModule,
+    MqttModule,
   ],
   controllers: [AppController],
   providers: [],
