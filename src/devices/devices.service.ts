@@ -9,7 +9,7 @@ import { MqttService } from '../mqtt/mqtt.service';
 @Injectable()
 export class DevicesService {
   private readonly mqttStatusCache = new Map<
-    number,
+    string,
     { status: string; lastSeen: number }
   >();
 
@@ -22,15 +22,16 @@ export class DevicesService {
   private readonly handleDeviceStatus = (topic: string, payload: Buffer) => {
     try {
       const message = JSON.parse(payload.toString()) as {
-        deviceId?: number;
+        deviceName?: string;
         status?: string;
+        timestamp?: string;
       };
 
-      if (message.deviceId == null || !message.status) {
+      if (!message.deviceName || !message.status) {
         return;
       }
 
-      this.mqttStatusCache.set(Number(message.deviceId), {
+      this.mqttStatusCache.set(message.deviceName, {
         status: String(message.status).toLowerCase(),
         lastSeen: Date.now(),
       });
@@ -50,7 +51,7 @@ export class DevicesService {
     const devices = await this.deviceRepository.find();
 
     return devices.map((device) => {
-      const lastStatus = this.mqttStatusCache.get(device.id);
+      const lastStatus = this.mqttStatusCache.get(device.name);
       const status =
         lastStatus && Date.now() - lastStatus.lastSeen < 30000
           ? lastStatus.status
