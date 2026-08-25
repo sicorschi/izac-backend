@@ -9,5 +9,6 @@ import { MqttModule } from '../mqtt/mqtt.module';
   imports: [TypeOrmModule.forFeature([Device]), MqttModule],
   controllers: [DevicesController],
   providers: [DevicesService],
+  exports: [DevicesService],
 })
 export class DevicesModule {}
