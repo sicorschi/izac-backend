@@ -16,6 +16,7 @@ interface StatusMQTTMessage {
   version?: string;
   timestamp?: string;
   lastSeen: number;
+  temperature?: number;
 }
 
 interface TemperatureMQTTMessage {
@@ -61,6 +62,7 @@ export class DevicesService {
         version: message.version,
         timestamp: message.timestamp,
         lastSeen: Date.now(),
+        temperature: message.temperature,
       });
       Logger.log(`Device status updated from MQTT topic ${topic}:`, message);
     } catch (error) {
@@ -143,6 +145,7 @@ export class DevicesService {
         version: lastStatus.version,
         timestamp: lastStatus.timestamp,
         lastSeen: lastStatus.lastSeen,
+        temperature: lastStatus.temperature,
       };
     }
     return null;
@@ -171,6 +174,7 @@ export class DevicesService {
       memory: body.memory,
       version: body.version,
       timestamp: body.timestamp,
+      temperature: body.temperature,
     });
   }
 
@@ -250,6 +254,12 @@ export class DevicesService {
     const mqttStatus = this.getStatusFromCache(device.name);
     const temperature = this.getTemperatureFromCache(device.name);
     const humidity = this.getHumidityFromCache(device.name);
+    console.log('Mapping device to detail:', {
+      device,
+      mqttStatus,
+      temperature,
+      humidity,
+    });
     const status = mqttStatus?.status ?? 'offline';
     return {
       createdAt: device.createdAt,
@@ -261,7 +271,7 @@ export class DevicesService {
       location: mqttStatus?.location ?? device.location,
       ip: mqttStatus?.ip ?? device.ip,
       uptime: mqttStatus?.uptime ?? device.uptime,
-      temperature,
+      temperature: mqttStatus?.temperature ?? temperature,
       version: mqttStatus?.version ?? device.version,
       memory: mqttStatus?.memory ?? device.memory,
       humidity,
