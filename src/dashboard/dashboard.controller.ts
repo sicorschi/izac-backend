@@ -10,13 +10,8 @@ export class DashboardController {
     return this.dashboardService.findAllDevices();
   }
 
-  @Get('/sensors')
-  findAllSensors() {
-    return this.dashboardService.findAllSensors();
-  }
-
-  @Get('/devices/details')
-  findAllDevicesDetailStats() {
-    return this.dashboardService.findAllDevicesDetailStats();
+  @Get('/devices/stats')
+  findAllDevicesStats() {
+    return this.dashboardService.findAllDevicesStats();
   }
 }

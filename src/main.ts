@@ -37,12 +37,16 @@ async function bootstrap() {
     }
     next();
   });
-
   app.enableCors(corsOptions);
+
   const port = Number(process.env.API_PORT ?? 3000);
   await app.listen(port, '0.0.0.0');
+
   Logger.log(`Application is running on: http://localhost:${port}`);
   Logger.log('DB connected successfully');
+  Logger.log(
+    `MQTT broker configured at ${process.env.MQTT_BROKER_URL ?? 'tcp://192.168.0.50:1883'}`,
+  );
 }
 
 void bootstrap();
