@@ -8,7 +8,7 @@ export class DeviceDetailResponse {
   location!: string;
   ip!: string;
   uptime!: string;
-  temperature!: string;
+  temperature!: string | number;
   version!: string;
   memory!: string;
   humidity!: string;

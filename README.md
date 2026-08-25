@@ -218,6 +218,25 @@ def get_memory_usage():
     return f"{used_pct:.1f}% used | {free_mb:.1f} MB free | {total_mb:.1f} MB total"
 
 
+def get_temperature_celsius():
+    try:
+        with open("/sys/class/thermal/thermal_zone0/temp", "r", encoding="utf-8") as file:
+            value = int(file.read().strip())
+        return round(value / 1000, 1)
+    except Exception:
+        try:
+            import subprocess
+            output = subprocess.check_output(
+                ["/usr/bin/vcgencmd", "measure_temp"],
+                text=True,
+                stderr=subprocess.DEVNULL,
+            )
+            value = output.replace("temp=", "").replace("'C", "")
+            return round(float(value), 1)
+        except Exception:
+            return None
+
+
 def get_iso_timestamp():
     return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
@@ -230,6 +249,7 @@ def get_status_payload():
         "location": LOCATION,
         "uptime": f"{int(get_uptime_seconds())}s",
         "memory": get_memory_usage(),
+        "temperature": get_temperature_celsius(),
         "version": "1.0.0",
         "timestamp": get_iso_timestamp(),
     }
