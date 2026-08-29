@@ -18,11 +18,8 @@ export class Device extends TimestampedEntity {
   @Column({ nullable: true, default: 'unknown' })
   location!: string;
 
-  @Column()
+  @Column({ nullable: true, default: 'unknown' })
   ip!: string;
-
-  @Column({ nullable: true, default: 80 })
-  port!: number;
 
   @Column({ nullable: true, default: 'unknown' })
   uptime!: string;

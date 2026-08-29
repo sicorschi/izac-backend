@@ -97,7 +97,6 @@ Nest is an MIT-licensed open source project. It can grow thanks to the sponsors 
 
 Nest is [MIT licensed](https://github.com/nestjs/nest/blob/master/LICENSE).
 
-
 ## Database
 
 Access the database
@@ -125,7 +124,6 @@ GRANT ALL PRIVILEGES ON izac_db.* TO 'izac_api'@'localhost';
 FLUSH PRIVILEGES;
 ```
 
-
 Example of .env file
 
 ```bash
@@ -150,3 +148,237 @@ TypeOrmModule.forRoot({
   synchronize: true,
 });
 ```
+
+## Raspberry Pi background services with systemd
+
+For a Raspberry Pi cluster, the recommended pattern is to run a small independent MQTT agent as a background daemon instead of depending on the Nest API process to keep publishing telemetry. This keeps each device autonomous and avoids having the backend be the only process that can publish status messages.
+
+### Why use systemd?
+
+`systemd` is the standard service manager on Raspberry Pi OS. It gives you:
+
+- automatic startup on boot
+- watchdog/restart support
+- easy log inspection with `journalctl`
+- no need for cron for live telemetry publishing
+- better reliability than a manual shell script left running in a terminal
+
+### Install MQTT client library
+
+On each Raspberry Pi:
+
+```bash
+sudo apt update
+sudo apt install -y python3-paho-mqtt python3-psutil
+```
+
+### Create the agent directory
+
+```bash
+sudo mkdir -p /opt/izac-agent
+cd /opt/izac-agent
+```
+
+### Create the agent script
+
+```bash
+sudo nano /opt/izac-agent/izac_agent.py
+```
+
+Example content:
+
+```python
+import json
+import os
+import socket
+import time
+from datetime import datetime, timezone
+
+import paho.mqtt.client as mqtt
+import psutil
+
+BROKER_HOST = os.getenv("MQTT_BROKER_HOST", "192.168.0.50")
+BROKER_PORT = int(os.getenv("MQTT_BROKER_PORT", "1883"))
+DEVICE_NAME = os.getenv("DEVICE_NAME", socket.gethostname())
+LOCATION = os.getenv("DEVICE_LOCATION", "unknown")
+DEVICE_IP = os.getenv("DEVICE_IP", "unknown")
+PUBLISH_INTERVAL = int(os.getenv("PUBLISH_INTERVAL", "10"))
+
+
+def get_uptime_seconds():
+    with open("/proc/uptime", "r", encoding="utf-8") as file:
+        return float(file.readline().split()[0])
+
+
+def get_memory_usage():
+    mem = psutil.virtual_memory()
+    used_pct = mem.percent
+    free_mb = mem.available / (1024 * 1024)
+    total_mb = mem.total / (1024 * 1024)
+    return f"{used_pct:.1f}% used | {free_mb:.1f} MB free | {total_mb:.1f} MB total"
+
+
+def get_temperature_celsius():
+    try:
+        with open("/sys/class/thermal/thermal_zone0/temp", "r", encoding="utf-8") as file:
+            value = int(file.read().strip())
+        return round(value / 1000, 1)
+    except Exception:
+        try:
+            import subprocess
+            output = subprocess.check_output(
+                ["/usr/bin/vcgencmd", "measure_temp"],
+                text=True,
+                stderr=subprocess.DEVNULL,
+            )
+            value = output.replace("temp=", "").replace("'C", "")
+            return round(float(value), 1)
+        except Exception:
+            return None
+
+
+def get_iso_timestamp():
+    return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+def get_status_payload():
+    payload = {
+        "deviceName": DEVICE_NAME,
+        "status": "online",
+        "ip": DEVICE_IP,
+        "location": LOCATION,
+        "uptime": f"{int(get_uptime_seconds())}s",
+        "memory": get_memory_usage(),
+        "temperature": get_temperature_celsius(),
+        "version": "1.0.0",
+        "timestamp": get_iso_timestamp(),
+    }
+    return json.dumps(payload)
+
+
+def on_connect(client, userdata, flags, rc):
+    if rc == 0:
+        print(f"[IZAC] Connected to MQTT broker at {BROKER_HOST}:{BROKER_PORT}")
+    else:
+        print(f"[IZAC] Connection failed with code {rc}")
+
+
+def main():
+    client = mqtt.Client(client_id=f"izac-agent-{DEVICE_NAME}")
+    client.on_connect = on_connect
+
+    while True:
+        try:
+            client.connect(BROKER_HOST, BROKER_PORT, 60)
+            break
+        except Exception as exc:
+            print(f"[IZAC] Retry connection to MQTT broker: {exc}")
+            time.sleep(5)
+
+    while True:
+        try:
+            payload = get_status_payload()
+            client.publish("izac/devices/status", payload, qos=0, retain=False)
+            print(f"[IZAC] Published: {payload}")
+            client.loop(timeout=1)
+            time.sleep(PUBLISH_INTERVAL)
+        except KeyboardInterrupt:
+            break
+        except Exception as exc:
+            print(f"[IZAC] Publish error: {exc}")
+            time.sleep(5)
+
+
+if __name__ == "__main__":
+    main()
+```
+
+### Create the service file
+
+```bash
+sudo nano /etc/systemd/system/izac-agent.service
+```
+
+Example content:
+
+```ini
+[Unit]
+Description=IZAC MQTT Agent
+After=network.target
+
+[Service]
+Type=simple
+Environment=MQTT_BROKER_HOST=192.168.0.50
+Environment=MQTT_BROKER_PORT=1883
+Environment=DEVICE_NAME=node-1
+Environment=DEVICE_LOCATION=room-1
+Environment=DEVICE_IP=192.168.0.21
+Environment=PUBLISH_INTERVAL=10
+WorkingDirectory=/opt/izac-agent
+ExecStart=/usr/bin/python3 /opt/izac-agent/izac_agent.py
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
+```
+
+Important note: the service must run as a valid system user. If you set `User=pi`, make sure that user exists on the machine. If it does not, the service will fail at startup with `Failed to determine user credentials: No such process`.
+
+For a quick local setup, removing the `User=` line entirely is often the fastest solution while testing. For production, create a dedicated service user instead.
+
+### Reload and start the service
+
+```bash
+sudo systemctl daemon-reload
+sudo systemctl enable izac-agent
+sudo systemctl start izac-agent
+sudo systemctl status izac-agent
+```
+
+### Check logs
+
+```bash
+sudo journalctl -u izac-agent -f
+```
+
+### Test the message flow
+
+On the broker host or any machine that can reach the broker:
+
+```bash
+mosquitto_sub -h 192.168.0.50 -p 1883 -t "izac/devices/status" -v
+```
+
+You should see messages arriving from each Raspberry Pi agent.
+
+### Why this pattern is preferred over cron jobs
+
+A cron job is okay for periodic maintenance tasks, but it is not ideal for device telemetry because:
+
+- it is not always-on
+- it does not handle reconnects gracefully
+- it may run late or be missed depending on system load
+- it is harder to monitor and debug
+
+A `systemd` daemon is a better choice for edge devices because it behaves like a real background service with automatic restarts and log collection.
+
+### Extending this pattern for other daemon services
+
+The same pattern can be reused for future background services such as:
+
+- sensor polling agents
+- telemetry exporters
+- gateways between local hardware and MQTT
+- database sync workers
+- cleanup and report jobs
+
+For each new service, create:
+
+1. a Python or Node.js script
+2. a systemd unit file
+3. required environment variables
+4. logs via `journalctl` for debugging
+5. a clean restart policy with `Restart=always`
+
+This keeps the cluster resilient and easy to maintain over time.

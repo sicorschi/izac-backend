@@ -25,7 +25,7 @@ export class DevicesController {
 
   @Get()
   findAll() {
-    return this.devicesService.findAll();
+    return this.devicesService.findAllDevices();
   }
 
   @Get(':id')
