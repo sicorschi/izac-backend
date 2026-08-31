@@ -17,15 +17,9 @@ interface StatusMQTTMessage {
   memory?: string;
   version?: string;
   timestamp?: string;
-  lastSeen: number;
-  temperature?: number;
-}
-
-interface SmartLightsMQTTMessage {
-  deviceName?: string;
+  lastSeen?: number;
   value?: string;
-  timestamp?: string;
-  lastSeen: number;
+  temperature?: number;
 }
 
 type MqttHandler = (topic: string, payload: Buffer) => void;
@@ -39,35 +33,29 @@ export class DevicesService {
   ) {}
 
   private readonly mqttStatusCache = new Map<string, StatusMQTTMessage>();
-  private readonly mqttSmartLightsCache = new Map<
-    string,
-    SmartLightsMQTTMessage
-  >();
+  private readonly mqttSmartLightsCache = new Map<string, StatusMQTTMessage>();
 
-  private logMqttMessage(
-    label: string,
-    topic: string,
-    payload: Buffer,
-    parsed?: unknown,
-  ) {
-    const rawPayload = payload.toString();
+  private logMqttMessage(label: string, topic: string, parsed?: unknown) {
     const parsedPayload =
       parsed !== undefined ? `\n${JSON.stringify(parsed, null, 2)}` : '\nnull';
 
     Logger.log(`
-========================================
+=========================================================================
 [MQTT] ${label}
-Topic: ${topic}
-Payload: ${rawPayload}
-Parsed:${parsedPayload}
-========================================
+[*]Topic: ${topic}
+[*]Parsed: ${parsedPayload}
+=========================================================================
     `);
   }
 
   private readonly handleDeviceStatus = (topic: string, payload: Buffer) => {
     try {
       const message = this.parseStatusMQTTMessage(payload);
-      this.logMqttMessage('Device status', topic, payload, message);
+      this.logMqttMessage(
+        `Device name: ${message?.deviceName ?? ''}`,
+        topic,
+        message,
+      );
 
       if (!message?.deviceName || !message?.status) {
         return;
@@ -88,27 +76,6 @@ Parsed:${parsedPayload}
     }
   };
 
-  private readonly handleDeviceStatusLights = (
-    topic: string,
-    payload: Buffer,
-  ) => {
-    try {
-      const message = this.parseStatusLightsMQTTMessage(payload);
-      this.logMqttMessage('Smart light status', topic, payload, message);
-
-      if (!message?.deviceName || !message?.value) {
-        return;
-      }
-      this.setStatusLightsInCache(message.deviceName, {
-        value: message.value,
-        timestamp: message.timestamp,
-        lastSeen: Date.now(),
-      });
-    } catch (error) {
-      Logger.error('Could not parse MQTT device status payload:', error);
-    }
-  };
-
   create(createDeviceDto: CreateDeviceDto) {
     const device = this.deviceRepository.create(createDeviceDto);
     return this.deviceRepository.save(device);
@@ -119,7 +86,7 @@ Parsed:${parsedPayload}
     const activeDevices = Array.from(this.mqttStatusCache.values()).filter(
       (deviceCache) =>
         deviceCache.status === 'online' &&
-        Date.now() - deviceCache.lastSeen < 30000,
+        Date.now() - (deviceCache.lastSeen ? deviceCache.lastSeen : 0) < 30000,
     ).length;
     const offlineDevices = totalDevices - activeDevices;
     return {
@@ -131,7 +98,10 @@ Parsed:${parsedPayload}
 
   private getStatusFromCache(deviceName: string): StatusMQTTMessage | null {
     const lastStatus = this.mqttStatusCache.get(deviceName.toLowerCase());
-    if (lastStatus && Date.now() - lastStatus.lastSeen < 30000) {
+    if (
+      lastStatus &&
+      Date.now() - (lastStatus.lastSeen ? lastStatus.lastSeen : 0) < 30000
+    ) {
       return {
         status: lastStatus.status,
         ip: lastStatus.ip,
@@ -174,32 +144,6 @@ Parsed:${parsedPayload}
     });
   }
 
-  private parseStatusLightsMQTTMessage(
-    payload: Buffer,
-  ): SmartLightsMQTTMessage | null {
-    try {
-      const message = JSON.parse(payload.toString()) as SmartLightsMQTTMessage;
-      if (!message.value || !message.timestamp || !message.deviceName) {
-        return null;
-      }
-      return message;
-    } catch (error) {
-      Logger.error('Could not parse MQTT device status lights payload:', error);
-      return null;
-    }
-  }
-
-  private setStatusLightsInCache(
-    deviceName: string,
-    body: SmartLightsMQTTMessage,
-  ) {
-    this.mqttSmartLightsCache.set(deviceName.toLowerCase(), {
-      value: body.value ? body.value.toLowerCase() : 'offline',
-      lastSeen: Date.now(),
-      timestamp: body.timestamp,
-    });
-  }
-
   private mapDeviceToDetail(device: Device) {
     const mqttStatus = this.getStatusFromCache(device.name);
     console.log('Mapping device to detail:', {
@@ -220,6 +164,7 @@ Parsed:${parsedPayload}
       uptime: mqttStatus?.uptime ?? device.uptime,
       temperature: mqttStatus?.temperature ?? null,
       version: mqttStatus?.version ?? device.version,
+      value: mqttStatus?.value ?? null,
       memory: mqttStatus?.memory ?? device.memory,
     };
   }
@@ -271,7 +216,7 @@ Parsed:${parsedPayload}
 
   private readonly mqttSubscriptions: Array<[string, MqttHandler]> = [
     [DevicesTopics.STATUS, this.handleDeviceStatus],
-    [DevicesTopics.SMART_LIGHT_01_STATUS, this.handleDeviceStatusLights],
+    [DevicesTopics.SMART_LIGHT_01_STATUS, this.handleDeviceStatus],
   ];
 
   onModuleInit() {

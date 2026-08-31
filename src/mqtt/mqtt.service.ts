@@ -38,8 +38,6 @@ export class MqttService implements OnModuleInit, OnModuleDestroy {
     });
 
     this.client.on('message', (topic, payload) => {
-      Logger.log(`MQTT message received: ${topic} ${payload.toString()}`);
-
       for (const [filter, handlers] of this.topicHandlers.entries()) {
         if (this.matchesTopicFilter(filter, topic)) {
           handlers.forEach((handler) => handler(topic, payload));

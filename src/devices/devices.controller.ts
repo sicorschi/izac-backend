@@ -6,16 +6,13 @@ import {
   Patch,
   Param,
   Delete,
-  UseGuards,
 } from '@nestjs/common';
-import { AuthGuard } from '@nestjs/passport';
 import { DevicesService } from './devices.service';
 import { CreateDeviceDto } from './dto/create-device.dto';
 import { UpdateDeviceDto } from './dto/update-device.dto';
 import { DevicesSmartLightDto } from './dto/devices-smart-light.dto';
 
 @Controller('devices')
-// @UseGuards(AuthGuard('jwt'))
 export class DevicesController {
   constructor(private readonly devicesService: DevicesService) {}
 
