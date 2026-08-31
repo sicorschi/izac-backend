@@ -5,6 +5,8 @@ import { CreateDeviceDto } from './dto/create-device.dto';
 import { UpdateDeviceDto } from './dto/update-device.dto';
 import { Device } from './entities/device.entity';
 import { MqttService } from '../mqtt/mqtt.service';
+import { DevicesTopics } from '../mqtt/devices-topics.types';
+import { DevicesSmartLightDto } from './dto/devices-smart-light.dto';
 
 interface StatusMQTTMessage {
   deviceName?: string;
@@ -19,19 +21,14 @@ interface StatusMQTTMessage {
   temperature?: number;
 }
 
-interface TemperatureMQTTMessage {
+interface SmartLightsMQTTMessage {
   deviceName?: string;
-  temperatureValue?: string;
+  value?: string;
   timestamp?: string;
   lastSeen: number;
 }
 
-interface HumidityMQTTMessage {
-  deviceName?: string;
-  humidityValue?: string;
-  timestamp?: string;
-  lastSeen: number;
-}
+type MqttHandler = (topic: string, payload: Buffer) => void;
 
 @Injectable()
 export class DevicesService {
@@ -42,14 +39,36 @@ export class DevicesService {
   ) {}
 
   private readonly mqttStatusCache = new Map<string, StatusMQTTMessage>();
-  private readonly mqttTemperatureCache = new Map<
+  private readonly mqttSmartLightsCache = new Map<
     string,
-    TemperatureMQTTMessage
+    SmartLightsMQTTMessage
   >();
-  private readonly mqttHumidityCache = new Map<string, HumidityMQTTMessage>();
+
+  private logMqttMessage(
+    label: string,
+    topic: string,
+    payload: Buffer,
+    parsed?: unknown,
+  ) {
+    const rawPayload = payload.toString();
+    const parsedPayload =
+      parsed !== undefined ? `\n${JSON.stringify(parsed, null, 2)}` : '\nnull';
+
+    Logger.log(`
+========================================
+[MQTT] ${label}
+Topic: ${topic}
+Payload: ${rawPayload}
+Parsed:${parsedPayload}
+========================================
+    `);
+  }
+
   private readonly handleDeviceStatus = (topic: string, payload: Buffer) => {
     try {
       const message = this.parseStatusMQTTMessage(payload);
+      this.logMqttMessage('Device status', topic, payload, message);
+
       if (!message?.deviceName || !message?.status) {
         return;
       }
@@ -64,52 +83,29 @@ export class DevicesService {
         lastSeen: Date.now(),
         temperature: message.temperature,
       });
-      Logger.log(`Device status updated from MQTT topic ${topic}:`, message);
     } catch (error) {
       Logger.error('Could not parse MQTT device status payload:', error);
     }
   };
 
-  private readonly handleDeviceStatusTemperature = (
+  private readonly handleDeviceStatusLights = (
     topic: string,
     payload: Buffer,
   ) => {
     try {
-      const message = this.parseTemperatureMQTTMessage(payload);
-      if (!message?.deviceName || !message?.temperatureValue) {
-        return;
-      }
-      this.setTemperatureInCache(
-        message.deviceName,
-        String(message.temperatureValue),
-        message.timestamp,
-      );
-      Logger.log(
-        `Device temperature updated from MQTT topic ${topic}:`,
-        message,
-      );
-    } catch (error) {
-      Logger.error('Could not parse MQTT device temperature payload:', error);
-    }
-  };
+      const message = this.parseStatusLightsMQTTMessage(payload);
+      this.logMqttMessage('Smart light status', topic, payload, message);
 
-  private readonly handleDeviceStatusHumidity = (
-    topic: string,
-    payload: Buffer,
-  ) => {
-    try {
-      const message = this.parseHumidityMQTTMessage(payload);
-      if (!message?.deviceName || !message?.humidityValue) {
+      if (!message?.deviceName || !message?.value) {
         return;
       }
-      this.setHumidityInCache(
-        message.deviceName,
-        String(message.humidityValue),
-        message.timestamp,
-      );
-      Logger.log(`Device humidity updated from MQTT topic ${topic}:`, message);
+      this.setStatusLightsInCache(message.deviceName, {
+        value: message.value,
+        timestamp: message.timestamp,
+        lastSeen: Date.now(),
+      });
     } catch (error) {
-      Logger.error('Could not parse MQTT device humidity payload:', error);
+      Logger.error('Could not parse MQTT device status payload:', error);
     }
   };
 
@@ -178,87 +174,38 @@ export class DevicesService {
     });
   }
 
-  private getTemperatureFromCache(deviceName: string): string {
-    const lastTemperature = this.mqttTemperatureCache.get(
-      deviceName.toLowerCase(),
-    );
-    if (lastTemperature && Date.now() - lastTemperature.lastSeen < 30000) {
-      return lastTemperature.temperatureValue ?? 'unknown';
-    }
-    return 'unknown';
-  }
-
-  private parseTemperatureMQTTMessage(
+  private parseStatusLightsMQTTMessage(
     payload: Buffer,
-  ): TemperatureMQTTMessage | null {
+  ): SmartLightsMQTTMessage | null {
     try {
-      const message = JSON.parse(payload.toString()) as TemperatureMQTTMessage;
-      if (!message.deviceName || !message.temperatureValue) {
+      const message = JSON.parse(payload.toString()) as SmartLightsMQTTMessage;
+      if (!message.value || !message.timestamp || !message.deviceName) {
         return null;
       }
       return message;
     } catch (error) {
-      Logger.error('Could not parse MQTT device temperature payload:', error);
+      Logger.error('Could not parse MQTT device status lights payload:', error);
       return null;
     }
   }
 
-  private setTemperatureInCache(
+  private setStatusLightsInCache(
     deviceName: string,
-    temperatureValue: string,
-    timestamp?: string,
+    body: SmartLightsMQTTMessage,
   ) {
-    this.mqttTemperatureCache.set(deviceName.toLowerCase(), {
-      temperatureValue,
+    this.mqttSmartLightsCache.set(deviceName.toLowerCase(), {
+      value: body.value ? body.value.toLowerCase() : 'offline',
       lastSeen: Date.now(),
-      timestamp,
-    });
-  }
-
-  private getHumidityFromCache(deviceName: string): string {
-    const lastHumidity = this.mqttHumidityCache.get(deviceName.toLowerCase());
-    if (lastHumidity && Date.now() - lastHumidity.lastSeen < 30000) {
-      return lastHumidity.humidityValue ?? 'unknown';
-    }
-    return 'unknown';
-  }
-
-  private parseHumidityMQTTMessage(
-    payload: Buffer,
-  ): HumidityMQTTMessage | null {
-    try {
-      const message = JSON.parse(payload.toString()) as HumidityMQTTMessage;
-      if (!message.deviceName || !message.humidityValue) {
-        return null;
-      }
-      return message;
-    } catch (error) {
-      Logger.error('Could not parse MQTT device humidity payload:', error);
-      return null;
-    }
-  }
-
-  private setHumidityInCache(
-    deviceName: string,
-    humidityValue: string,
-    timestamp?: string,
-  ) {
-    this.mqttHumidityCache.set(deviceName.toLowerCase(), {
-      humidityValue,
-      lastSeen: Date.now(),
-      timestamp,
+      timestamp: body.timestamp,
     });
   }
 
   private mapDeviceToDetail(device: Device) {
     const mqttStatus = this.getStatusFromCache(device.name);
-    const temperature = this.getTemperatureFromCache(device.name);
-    const humidity = this.getHumidityFromCache(device.name);
     console.log('Mapping device to detail:', {
       device,
       mqttStatus,
-      temperature,
-      humidity,
+      temperature: mqttStatus?.temperature,
     });
     const status = mqttStatus?.status ?? 'offline';
     return {
@@ -271,10 +218,9 @@ export class DevicesService {
       location: mqttStatus?.location ?? device.location,
       ip: mqttStatus?.ip ?? device.ip,
       uptime: mqttStatus?.uptime ?? device.uptime,
-      temperature: mqttStatus?.temperature ?? temperature,
+      temperature: mqttStatus?.temperature ?? null,
       version: mqttStatus?.version ?? device.version,
       memory: mqttStatus?.memory ?? device.memory,
-      humidity,
     };
   }
 
@@ -311,15 +257,26 @@ export class DevicesService {
     return this.deviceRepository.delete(id);
   }
 
+  publish(topic: string, payload: unknown) {
+    const serialized =
+      typeof payload === 'string' ? payload : JSON.stringify(payload);
+    this.mqttService.publish(topic, serialized);
+  }
+
+  actionSmartLight(devicesSmartLightDto: DevicesSmartLightDto) {
+    const payload = devicesSmartLightDto.action;
+    console.log('Publishing smart light action:', payload);
+    this.publish(DevicesTopics.SMART_LIGHT_01_COMMAND, payload);
+  }
+
+  private readonly mqttSubscriptions: Array<[string, MqttHandler]> = [
+    [DevicesTopics.STATUS, this.handleDeviceStatus],
+    [DevicesTopics.SMART_LIGHT_01_STATUS, this.handleDeviceStatusLights],
+  ];
+
   onModuleInit() {
-    this.mqttService.subscribe('izac/devices/status', this.handleDeviceStatus);
-    this.mqttService.subscribe(
-      'izac/devices/status/esp32/temperature',
-      this.handleDeviceStatusTemperature,
-    );
-    this.mqttService.subscribe(
-      'izac/devices/status/esp32/humidity',
-      this.handleDeviceStatusHumidity,
-    );
+    this.mqttSubscriptions.forEach(([topic, handler]) => {
+      this.mqttService.subscribe(topic, handler);
+    });
   }
 }

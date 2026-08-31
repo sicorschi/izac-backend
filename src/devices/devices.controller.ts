@@ -12,6 +12,7 @@ import { AuthGuard } from '@nestjs/passport';
 import { DevicesService } from './devices.service';
 import { CreateDeviceDto } from './dto/create-device.dto';
 import { UpdateDeviceDto } from './dto/update-device.dto';
+import { DevicesSmartLightDto } from './dto/devices-smart-light.dto';
 
 @Controller('devices')
 // @UseGuards(AuthGuard('jwt'))
@@ -21,6 +22,11 @@ export class DevicesController {
   @Post()
   create(@Body() createDeviceDto: CreateDeviceDto) {
     return this.devicesService.create(createDeviceDto);
+  }
+
+  @Post('smart-light')
+  actionSmartLight(@Body() devicesSmartLightDto: DevicesSmartLightDto) {
+    return this.devicesService.actionSmartLight(devicesSmartLightDto);
   }
 
   @Get()

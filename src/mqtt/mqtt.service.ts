@@ -90,8 +90,8 @@ export class MqttService implements OnModuleInit, OnModuleDestroy {
     });
   }
 
-  publish(topic: string, payload: unknown) {
-    this.client.publish(topic, JSON.stringify(payload), {
+  publish(topic: string, payload: string | Buffer) {
+    this.client.publish(topic, payload, {
       qos: 0,
       retain: false,
     });
