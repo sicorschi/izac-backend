@@ -44,30 +44,27 @@ export class DevicesService {
     SmartLightsMQTTMessage
   >();
 
-  private logMqttMessage(
-    label: string,
-    topic: string,
-    payload: Buffer,
-    parsed?: unknown,
-  ) {
-    const rawPayload = payload.toString();
+  private logMqttMessage(label: string, topic: string, parsed?: unknown) {
     const parsedPayload =
       parsed !== undefined ? `\n${JSON.stringify(parsed, null, 2)}` : '\nnull';
 
     Logger.log(`
-========================================
+=========================================================================
 [MQTT] ${label}
 Topic: ${topic}
-Payload: ${rawPayload}
 Parsed:${parsedPayload}
-========================================
+=========================================================================
     `);
   }
 
   private readonly handleDeviceStatus = (topic: string, payload: Buffer) => {
     try {
       const message = this.parseStatusMQTTMessage(payload);
-      this.logMqttMessage('Device status', topic, payload, message);
+      this.logMqttMessage(
+        `K3s cluster status: ${message?.deviceName ?? ''}`,
+        topic,
+        message,
+      );
 
       if (!message?.deviceName || !message?.status) {
         return;
@@ -94,7 +91,7 @@ Parsed:${parsedPayload}
   ) => {
     try {
       const message = this.parseStatusLightsMQTTMessage(payload);
-      this.logMqttMessage('Smart light status', topic, payload, message);
+      this.logMqttMessage('Smart light status', topic, message);
 
       if (!message?.deviceName || !message?.value) {
         return;
