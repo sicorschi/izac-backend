@@ -2,7 +2,7 @@
   <a href="http://nestjs.com/" target="blank"><img src="https://nestjs.com/img/logo-small.svg" width="120" alt="Nest Logo" /></a>
 </p>
 
-[circleci-image]: https://img.shields.io/circleci/build/github/nestjs/nest/master?token=abc123def456
+[circleci-image]: https://img.shields.io/circleci/build/github/nestjs/nest/master
 [circleci-url]: https://circleci.com/gh/nestjs/nest
 
   <p align="center">A progressive <a href="http://nodejs.org" target="_blank">Node.js</a> framework for building efficient and scalable server-side applications.</p>
@@ -114,7 +114,7 @@ CREATE DATABASE izac_db;
 Create the user api
 
 ```bash
-CREATE USER 'izac_api'@'localhost' IDENTIFIED BY 'StrongPassword123!';
+CREATE USER 'izac_api'@'localhost' IDENTIFIED BY 'replace_with_a_strong_password';
 ```
 
 Grant permissions only to that database
@@ -126,11 +126,13 @@ FLUSH PRIVILEGES;
 
 Example of .env file
 
+Use the repository template in [.env.example](.env.example) and copy it to a local `.env` file before running the app.
+
 ```bash
 DB_HOST=192.168.X.X
 DB_PORT=3306
 DB_USERNAME=izac_api
-DB_PASSWORD=StrongPassword123!
+DB_PASSWORD=replace_with_a_strong_password
 DB_NAME=izac_db
 ```
 
@@ -148,6 +150,10 @@ TypeOrmModule.forRoot({
   synchronize: true,
 });
 ```
+
+## Security note
+
+Never commit real secrets to the repository. Keep production values in a local `.env` file, and use [.env.example](.env.example) as the safe template for other developers.
 
 ## Raspberry Pi background services with systemd
 
