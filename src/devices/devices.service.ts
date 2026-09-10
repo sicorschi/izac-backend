@@ -20,6 +20,7 @@ interface StatusMQTTMessage {
   lastSeen?: number;
   value?: string;
   temperature?: number;
+  humidity?: number;
 }
 
 type MqttHandler = (topic: string, payload: Buffer) => void;
@@ -70,6 +71,7 @@ export class DevicesService {
         timestamp: message.timestamp,
         lastSeen: Date.now(),
         temperature: message.temperature,
+        humidity: message.humidity,
       });
     } catch (error) {
       Logger.error('Could not parse MQTT device status payload:', error);
@@ -112,6 +114,7 @@ export class DevicesService {
         timestamp: lastStatus.timestamp,
         lastSeen: lastStatus.lastSeen,
         temperature: lastStatus.temperature,
+        humidity: lastStatus.humidity,
       };
     }
     return null;
@@ -141,6 +144,7 @@ export class DevicesService {
       version: body.version,
       timestamp: body.timestamp,
       temperature: body.temperature,
+      humidity: body.humidity,
     });
   }
 
@@ -163,9 +167,11 @@ export class DevicesService {
       ip: mqttStatus?.ip ?? device.ip,
       uptime: mqttStatus?.uptime ?? device.uptime,
       temperature: mqttStatus?.temperature ?? null,
+      humidity: mqttStatus?.humidity ?? null,
       version: mqttStatus?.version ?? device.version,
       value: mqttStatus?.value ?? null,
       memory: mqttStatus?.memory ?? device.memory,
+      timestamp: mqttStatus?.timestamp ?? null,
     };
   }
 
@@ -217,6 +223,7 @@ export class DevicesService {
   private readonly mqttSubscriptions: Array<[string, MqttHandler]> = [
     [DevicesTopics.STATUS, this.handleDeviceStatus],
     [DevicesTopics.SMART_LIGHT_01_STATUS, this.handleDeviceStatus],
+    [DevicesTopics.DHT11_01_STATUS, this.handleDeviceStatus],
   ];
 
   onModuleInit() {
