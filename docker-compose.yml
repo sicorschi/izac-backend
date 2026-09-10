@@ -4,12 +4,12 @@ services:
     container_name: izac-db
     restart: always
     environment:
-      MARIADB_ROOT_PASSWORD: StrongAdminPassword123
-      MARIADB_DATABASE: izac_db
-      MARIADB_USER: izac_api
-      MARIADB_PASSWORD: StrongPassword123
+      MARIADB_ROOT_PASSWORD: ${MARIADB_ROOT_PASSWORD:-change_me_root}
+      MARIADB_DATABASE: ${DB_NAME:-izac_db}
+      MARIADB_USER: ${DB_USERNAME:-izac_api}
+      MARIADB_PASSWORD: ${DB_PASSWORD:-change_me_db}
     ports:
-      - '3307:3306'
+      - '${DB_PORT:-3307}:3306'
     volumes:
       - izac_db_data:/var/lib/mysql
 
