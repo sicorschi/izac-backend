@@ -19,32 +19,38 @@ NTPClient timeClient(ntpUDP, "pool.ntp.org", 0, 60000);
 long lastMsg = 0;
 char msg[50];
 int value = 0;
-const char* ssid = "";
-const char* password = "";
-const char* mqtt_server = "192.168.0.50";
+const char* ssid = "sercommBB9013";
+const char* password = "B0mb4H4d1ch0b0mb4";
+const char* mqttServer = "192.168.0.50";
 long duration;
 float distanceCm;
 const int trigPin = 2;
 const int echoPin = 15;
 const int relay = 13;
-const char* light_output_topic = "izac/devices/esp32/1/light/1/output";
-const char* light_status_topic = "izac/devices/esp32/1/light/1/status";
+const char* lightOutputTopic = "izac/devices/esp32/1/light/1/output";
+const char* lightStatusTopic = "izac/devices/esp32/1/light/1/status";
 const char* deviceName = "esp32_1_light_1";
 // Variables for automatic light control
 bool presenceDetected = false;
 bool lightsOn = false;
 unsigned long lastPresenceTime = 0;
-const unsigned long lightOffDelay = 10000; // 10 seconds in milliseconds
-const char* FIRMWARE_VERSION = "1.0.0";
+const unsigned long lightOffDelay = 25000; // 25 seconds
+const int presenceDistance = 50;
+const char* deviceClientId = "ESP32_01_Light_01_";
 
 String getIsoTimestamp() {
-  if (!timeClient.update()) {
-    return String(millis());
+  if (!timeClient.isTimeSet()) {
+    Serial.println("[NTP] Time not set yet");
+    if (!timeClient.update()) {
+      Serial.println("[NTP] update() failed");
+      return String(""); // better than millis() for a missing timestamp
+    }
   }
 
   time_t now = timeClient.getEpochTime();
   if (now <= 0) {
-    return String(millis());
+    Serial.println("[NTP] invalid epoch time");
+    return String(""); // or fallback to millis() only if you truly want a numeric fallback
   }
 
   char buffer[30];
@@ -56,22 +62,21 @@ String getMemorySummary() {
   uint32_t freeHeap = ESP.getFreeHeap();
   uint32_t totalHeap = ESP.getHeapSize();
   float usedPercent = ((float)(totalHeap - freeHeap) / totalHeap) * 100.0f;
-
   return String(usedPercent, 1) + "% used | " +
          String(freeHeap / 1024.0, 1) + " KB free | " +
          String(totalHeap / 1024.0, 1) + " KB total";
 }
 
 String buildLightStatusPayload(String value) {
-  String timestamp = getIsoTimestamp();
   String payload = "{";
   payload += "\"deviceName\":\"" + String(deviceName) + "\",";
   payload += "\"value\":\"" + value + "\",";
   payload += "\"status\":\"online\",";
+  payload += "\"location\":\"Kitchen\",";
   payload += "\"ip\":\"" + WiFi.localIP().toString() + "\",";
   payload += "\"uptime\":\"" + String(millis() / 1000) + "\",";
   payload += "\"memory\":\"" + getMemorySummary() + "\",";
-  payload += "\"timestamp\":\"" + timestamp + "\"";
+  payload += "\"timestamp\":\"" + getIsoTimestamp() + "\"";
   payload += "}";
   return payload;
 }
@@ -88,11 +93,9 @@ void callback(char* topic, byte* message, unsigned int length) {
   Serial.print("' (length: ");
   Serial.print(length);
   Serial.println(")");
-  
   // Convert message to lowercase for case-insensitive comparison
   messageTemp.toLowerCase();
-  
-  if (String(topic) == light_output_topic) {
+  if (String(topic) == lightOutputTopic) {
     Serial.print("[MQTT] Processing light control command: ");
     Serial.println(messageTemp);
     if(messageTemp == "on"){
@@ -132,7 +135,7 @@ void publishLightStatus(String value) {
   String payload = buildLightStatusPayload(value);
   Serial.print("[MQTT] Publishing status: ");
   Serial.println(payload);
-  bool ok = client.publish(light_status_topic, payload.c_str());
+  bool ok = client.publish(lightStatusTopic, payload.c_str());
   Serial.print("[MQTT] Publish result: ");
   Serial.println(ok ? "SUCCESS" : "FAILED");
   Serial.print("[MQTT] Connection state: ");
@@ -150,31 +153,27 @@ void reconnect() {
   // Loop until we're reconnected
   while (!client.connected()) {
     Serial.println("[MQTT] Attempting MQTT connection...");
-    
     // Create unique client ID using MAC address
-    String clientId = "ESP32_01_Light_01_" + WiFi.macAddress();
+    String clientId = deviceClientId + WiFi.macAddress();
     clientId.replace(":", "");
     Serial.print("[MQTT] Client ID: ");
     Serial.println(clientId);
-    
     // Attempt to connect
     if (client.connect(clientId.c_str())) {
       Serial.println("[MQTT] Connected successfully!");
-      
       // Subscribe to control topic
       Serial.print("[MQTT] Subscribing to topic:");
-      Serial.print(light_output_topic);
-      if (client.subscribe(light_output_topic)) {
+      Serial.print(lightOutputTopic);
+      if (client.subscribe(lightOutputTopic)) {
         Serial.println("SUCCESS");
       } else {
         Serial.println("FAILED");
       }
-      
       // Publish connection status
       publishLightStatus("Connected");
       publishLightStatus(lightsOn ? "on" : "off");
       Serial.println("[MQTT] Ready to receive commands on");
-      Serial.println(light_output_topic);
+      Serial.println(lightOutputTopic);
       Serial.println("[MQTT] Send 'on' or 'off' to control lights");
     } else {
       Serial.print("[MQTT] Connection failed, rc=");
@@ -196,9 +195,14 @@ void setup() {
     Serial.println("Connecting to WiFi..");
   }
   Serial.println(WiFi.localIP());
-  client.setServer(mqtt_server, 1883);
+  client.setServer(mqttServer, 1883);
   client.setCallback(callback);
   timeClient.begin();
+  timeClient.setTimeOffset(0);
+  Serial.println("Waiting for NTP time...");
+  while (!timeClient.update()) {
+    delay(1000);
+  }
 }
 
 void loop() {
@@ -211,8 +215,8 @@ void loop() {
   duration = pulseIn(echoPin, HIGH);
   distanceCm = duration * SOUND_SPEED/2;
   
-  // Check for presence detection (within 10cm)
-  if (distanceCm < 10 && distanceCm > 0) {
+  // Check for presence detection (within 40cm)
+  if (distanceCm < presenceDistance && distanceCm > 0) {
     if (!presenceDetected) {
       presenceDetected = true;
       Serial.println("Presence detected!");
